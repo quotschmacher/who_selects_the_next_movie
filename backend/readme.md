@@ -1,3 +1,7 @@
+## DevContainer
+
+- zum Zeitpunkt der Erstellung war pydantic noch nicht mit Python 3.13 kompatibel - es kam zu Fehlern beim Setup
+
 ## App starten
 
 `uvicorn app.main:app --reload`
