@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models, database
 from .routes import router
 
-app = FastAPI()
+app = FastAPI(docs_url="/swagger", openapi_url="/swagger.json")
 
 # Datenbanktabellen erstellen
 models.Base.metadata.create_all(bind=database.engine)

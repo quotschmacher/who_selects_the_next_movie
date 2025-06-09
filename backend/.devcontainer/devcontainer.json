@@ -1,6 +1,9 @@
 {
-    "image": "python:3.12-slim",
-    "postCreateCommand": "pip3 install --user -r requirements.txt && sleep infinity",
+    // "image": "python:3.12-slim",
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "fastapi_backend",
+    "postCreateCommand": "pip3 install --user -r requirements.txt --root-user-action=ignore",
+    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "customizations": {
         "vscode": {
             "extensions": [
