@@ -1,0 +1,48 @@
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspaces/app:cached
+    command: sleep infinity
+    networks: [devnet]
+    depends_on:
+      - api
+      - web
+
+  api:
+    build:
+      context: ..
+      dockerfile: .devcontainer/api.Dockerfile
+    working_dir: /workspaces/app/backend
+    command: bash -lc "uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: sqlite:////workspaces/app/backend/db.sqlite
+      CORS_ORIGINS: http://localhost:3000
+      TMDB_API_KEY: ""
+    volumes:
+      - ..:/workspaces/app:cached
+    ports:
+      - "8000:8000"
+    networks: [devnet]
+
+  web:
+    image: node:20-alpine
+    working_dir: /workspaces/app/frontend
+    command: sh -lc "if [ -f package-lock.json ]; then npm ci; else npm i; fi; npm run dev"
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+    volumes:
+      - ..:/workspaces/app:cached
+      - web-node-modules:/workspaces/app/frontend/node_modules
+    ports:
+      - "3000:3000"
+    depends_on: [api]
+    networks: [devnet]
+
+networks:
+  devnet:
+
+volumes:
+  web-node-modules:

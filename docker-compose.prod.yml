@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    environment:
+      DATABASE_URL: sqlite:////app/data/db.sqlite
+      TMDB_API_KEY: ""
+      CORS_ORIGINS: http://localhost
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    # expose only internally; will be reached via web rewrites
+    # ports: ["8000:8000"]
+  web:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: /api
+    ports:
+      - "80:3000"
+    depends_on: [api]
+volumes: {}

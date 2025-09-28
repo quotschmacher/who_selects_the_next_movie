@@ -1,0 +1,15 @@
+{
+  "name": "Movie Night Dev (SQLite)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/app",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.11" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "forwardPorts": [3000, 8000],
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteEnv": { "NEXT_PUBLIC_BACKEND_URL": "http://localhost:8000" },
+  "runServices": ["api", "web"],
+  "shutdownAction": "stopCompose"
+}
