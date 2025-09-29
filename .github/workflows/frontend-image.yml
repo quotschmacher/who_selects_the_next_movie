@@ -1,0 +1,36 @@
+name: Build Frontend Image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare tags
+        run: |
+          OWNER=${{ github.repository_owner }}
+          REPO=${{ github.repository }}
+          OWNER_LOWER=${OWNER,,}
+          REPO_NAME=${REPO##*/}
+          REPO_LOWER=${REPO_NAME,,}
+          IMAGE_NAME="ghcr.io/${OWNER_LOWER}/${REPO_LOWER}-frontend"
+          SHORT_SHA=${GITHUB_SHA::8}
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+
+      - name: Build and push
+        run: |
+          docker build -f frontend.Dockerfile -t "$IMAGE_NAME:latest" -t "$IMAGE_NAME:$SHORT_SHA" .
+          docker push "$IMAGE_NAME:latest"
+          docker push "$IMAGE_NAME:$SHORT_SHA"
