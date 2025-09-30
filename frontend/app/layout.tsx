@@ -1,10 +1,11 @@
 import "./globals.css";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ReactQueryClientProvider } from "@/lib/query-client";
 
 export const metadata = { title: "Movie Night (local)" };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="de">
       <body className="min-h-screen">
@@ -25,3 +26,4 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+

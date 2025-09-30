@@ -2,11 +2,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import Link from "next/link";
+import type { RotationNextResponse, WatchlogResponse } from "@/lib/types";
 
 export default function Page() {
   const qc = useQueryClient();
-  const nextTurn = useQuery({ queryKey: ["next"], queryFn: () => api.get("/rotation/next") });
-  const last5 = useQuery({ queryKey: ["last5"], queryFn: () => api.get("/watchlog?limit=5") });
+  const nextTurn = useQuery<RotationNextResponse>({ queryKey: ["next"], queryFn: () => api.get<RotationNextResponse>("/rotation/next") });
+  const last5 = useQuery<WatchlogResponse>({ queryKey: ["last5"], queryFn: () => api.get<WatchlogResponse>("/watchlog?limit=5") });
   const confirmMutation = useMutation({
     mutationFn: () => api.post("/rotation/confirm", {}),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["next"]}); qc.invalidateQueries({ queryKey: ["watchlog"]}); qc.invalidateQueries({ queryKey: ["last5"]}); }
@@ -63,3 +64,4 @@ export default function Page() {
     </div>
   );
 }
+
