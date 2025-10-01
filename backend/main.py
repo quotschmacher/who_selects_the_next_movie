@@ -169,9 +169,9 @@ def reorder_users(payload: dict):
 async def search_movies2(q: str, mode: str = "title"):
     def mock_results(q: str, mode: str):
         base = [
-            {"id": "tt1375666", "title": "Inception", "year": 2010, "overview": "A thief who steals corporate secrets...", "poster": ""},
-            {"id": "tt0133093", "title": "The Matrix", "year": 1999, "overview": "A computer hacker learns...", "poster": ""},
-            {"id": "tt0114369", "title": "Se7en", "year": 1995, "overview": "Two detectives hunt a serial killer...", "poster": ""},
+            {"id": "tmdb:movie:123", "title": "Inception", "year": 2010, "overview": "A thief who steals corporate secrets...", "poster": "", "kind": "movie"},
+            {"id": "tmdb:movie:456", "title": "The Matrix", "year": 1999, "overview": "A computer hacker learns...", "poster": "", "kind": "movie"},
+            {"id": "tmdb:movie:789", "title": "Se7en", "year": 1995, "overview": "Two detectives hunt a serial killer...", "poster": "", "kind": "movie"},
         ]
         if mode == "actor":
             return base
@@ -184,45 +184,90 @@ async def search_movies2(q: str, mode: str = "title"):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             if mode == "actor":
-                r = await client.get("https://api.themoviedb.org/3/search/person",
-                                     params={"api_key": settings.TMDB_API_KEY, "query": q, "language": "de-DE"})
+                r = await client.get(
+                    "https://api.themoviedb.org/3/search/person",
+                    params={"api_key": settings.TMDB_API_KEY, "query": q, "language": "de-DE"},
+                )
                 r.raise_for_status()
                 people = r.json().get("results", [])
                 results = []
                 if people:
                     pid = people[0].get("id")
-                    cr = await client.get(f"https://api.themoviedb.org/3/person/{pid}/movie_credits",
-                                          params={"api_key": settings.TMDB_API_KEY, "language": "de-DE"})
+                    cr = await client.get(
+                        f"https://api.themoviedb.org/3/person/{pid}/movie_credits",
+                        params={"api_key": settings.TMDB_API_KEY, "language": "de-DE"},
+                    )
                     cr.raise_for_status()
                     movies = cr.json().get("cast", [])
-                    movies = sorted(movies, key=lambda x: x.get("popularity", 0), reverse=True)[:20]
+                    movies = sorted(movies, key=lambda x: x.get("popularity", 0) or 0, reverse=True)[:20]
                     for m in movies:
-                        results.append({
-                            "id": f"tmdb:{m.get('id')}",
-                            "title": m.get("title"),
+                        results.append(
+                            {
+                                "id": f"tmdb:movie:{m.get('id')}",
+                                "title": m.get("title") or m.get("original_title") or "",
+                                "year": (m.get("release_date") or "")[:4],
+                                "overview": m.get("overview") or "",
+                                "poster": f"https://image.tmdb.org/t/p/w185{m.get('poster_path')}" if m.get("poster_path") else "",
+                                "kind": "movie",
+                            }
+                        )
+                return {"results": results}
+
+            movie_resp = await client.get(
+                "https://api.themoviedb.org/3/search/movie",
+                params={"api_key": settings.TMDB_API_KEY, "query": q, "include_adult": "false", "language": "de-DE"},
+            )
+            movie_resp.raise_for_status()
+            movie_results = movie_resp.json().get("results", [])
+
+            tv_results = []
+            try:
+                tv_resp = await client.get(
+                    "https://api.themoviedb.org/3/search/tv",
+                    params={"api_key": settings.TMDB_API_KEY, "query": q, "include_adult": "false", "language": "de-DE"},
+                )
+                tv_resp.raise_for_status()
+                tv_results = tv_resp.json().get("results", [])
+            except httpx.HTTPError as tv_error:
+                print(f"[TMDb error] {tv_error!r} – tv search skipped")
+
+            combined = []
+            for m in movie_results:
+                combined.append(
+                    (
+                        float(m.get("popularity") or 0),
+                        {
+                            "id": f"tmdb:movie:{m.get('id')}",
+                            "title": m.get("title") or m.get("original_title") or "Unbekannter Titel",
                             "year": (m.get("release_date") or "")[:4],
                             "overview": m.get("overview") or "",
-                            "poster": f"https://image.tmdb.org/t/p/w185{m.get('poster_path')}" if m.get("poster_path") else ""
-                        })
-                return {"results": results}
-            # title mode
-            r = await client.get("https://api.themoviedb.org/3/search/movie",
-                                 params={"api_key": settings.TMDB_API_KEY, "query": q, "include_adult": "false", "language": "de-DE"})
-            r.raise_for_status()
-            data = r.json()
-            results = []
-            for m in data.get("results", []):
-                results.append({
-                    "id": f"tmdb:{m.get('id')}",
-                    "title": m.get("title"),
-                    "year": (m.get("release_date") or "")[:4],
-                    "overview": m.get("overview"),
-                    "poster": f"https://image.tmdb.org/t/p/w185{m.get('poster_path')}" if m.get("poster_path") else ""
-                })
+                            "poster": f"https://image.tmdb.org/t/p/w185{m.get('poster_path')}" if m.get("poster_path") else "",
+                            "kind": "movie",
+                        },
+                    )
+                )
+            for t in tv_results:
+                combined.append(
+                    (
+                        float(t.get("popularity") or 0),
+                        {
+                            "id": f"tmdb:tv:{t.get('id')}",
+                            "title": t.get("name") or t.get("original_name") or "Unbekannte Serie",
+                            "year": (t.get("first_air_date") or "")[:4],
+                            "overview": t.get("overview") or "",
+                            "poster": f"https://image.tmdb.org/t/p/w185{t.get('poster_path')}" if t.get("poster_path") else "",
+                            "kind": "tv",
+                        },
+                    )
+                )
+
+            combined.sort(key=lambda item: item[0], reverse=True)
+            results = [item[1] for item in combined[:20]]
             return {"results": results}
     except httpx.HTTPError as e:
-        print(f"[TMDb error] {e!r} â€“ fallback to mock")
-        return {"results": mock_results(q, mode)}
+        print(f"[TMDb error] {e!r} – fallback to mock")
+
+    return {"results": mock_results(q, mode)}
 
 # Create event
 @app.post("/movies/select")

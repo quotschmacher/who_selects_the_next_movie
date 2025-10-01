@@ -42,6 +42,7 @@ export type SearchResult = {
   year?: string | number | null;
   overview: string;
   poster: string | null;
+  kind?: "movie" | "tv";
 };
 
 export type SearchResponse = {

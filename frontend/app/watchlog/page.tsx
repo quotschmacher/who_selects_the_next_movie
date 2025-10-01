@@ -10,6 +10,9 @@ import type {
   SearchResult,
 } from "@/lib/types";
 
+type SearchMode = "title" | "actor";
+type SearchKind = "movie" | "tv";
+
 type UpdateWatchEventPayload = {
   watched_at?: string;
   picker_user_id?: number;
@@ -19,17 +22,53 @@ type UpdateWatchEventPayload = {
   movie_id?: string | number;
 };
 
+type TmdbInfo = {
+  kind: SearchKind;
+  tmdbUrl: string | null;
+  imdbUrl: string;
+};
+
+function resolveTmdb(item: SearchResult): TmdbInfo {
+  const raw = String(item.id ?? "");
+  const parts = raw.split(":");
+  const isTmdb = parts[0] === "tmdb";
+  const tmdbId = isTmdb ? parts[parts.length - 1] : null;
+  const typeFromId = isTmdb && parts.length >= 3 ? parts[1] : undefined;
+  const derivedKind: SearchKind = item.kind ?? (typeFromId === "tv" ? "tv" : "movie");
+  const tmdbUrl =
+    isTmdb && tmdbId ? `https://www.themoviedb.org/${derivedKind === "tv" ? "tv" : "movie"}/${tmdbId}` : null;
+  const imdbUrl = `https://www.imdb.com/find/?q=${encodeURIComponent(item.title)}`;
+  return { kind: derivedKind, tmdbUrl, imdbUrl };
+}
+
+function kindLabel(kind: SearchKind): string {
+  return kind === "tv" ? "Serie" : "Film";
+}
+
 export default function WatchlogPage() {
   const [limit, setLimit] = useState(25);
-  const [mode, setMode] = useState("title");
+  const [mode, setMode] = useState<SearchMode>("title");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<WatchlogItem | null>(null);
+  const [date, setDate] = useState("");
+  const [picker, setPicker] = useState<number | null>(null);
+  const [titleVal, setTitleVal] = useState("");
+  const [changeMovie, setChangeMovie] = useState(false);
   const qc = useQueryClient();
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(handle);
   }, [q]);
+
+  useEffect(() => {
+    if (!changeMovie) {
+      setQ("");
+      setDebouncedQ("");
+    }
+  }, [changeMovie]);
 
   const { data, isLoading } = useQuery<WatchlogResponse>({
     queryKey: ["watchlog", limit],
@@ -41,17 +80,9 @@ export default function WatchlogPage() {
     queryFn: () => api.get<UsersResponse>("/users"),
   });
 
-  const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState<WatchlogItem | null>(null);
-  const [date, setDate] = useState("");
-  const [picker, setPicker] = useState<number | null>(null);
-  const [titleVal, setTitleVal] = useState("");
-  const [changeMovie, setChangeMovie] = useState(false);
-
   const search = useQuery<SearchResponse>({
     queryKey: ["search-edit", debouncedQ, mode],
-    queryFn: () =>
-      api.get<SearchResponse>(`/movies/search2?q=${encodeURIComponent(debouncedQ)}&mode=${mode}`),
+    queryFn: () => api.get<SearchResponse>(`/movies/search2?q=${encodeURIComponent(debouncedQ)}&mode=${mode}`),
     enabled: changeMovie && debouncedQ.length > 1,
   });
 
@@ -80,16 +111,14 @@ export default function WatchlogPage() {
     setTitleVal(item.title || "");
     setChangeMovie(item.is_placeholder || false);
     setQ("");
+    setDebouncedQ("");
     setOpen(true);
   }
 
   function selectMovie(movie: SearchResult) {
     if (!current) return;
-    const imdbSearch = `https://www.imdb.com/find/?q=${encodeURIComponent(movie.title)}`;
-    const tmdbLink = String(movie.id).startsWith("tmdb:")
-      ? `https://www.themoviedb.org/movie/${String(movie.id).split(":")[1]}`
-      : null;
-    const searchUrl = tmdbLink || imdbSearch;
+    const info = resolveTmdb(movie);
+    const searchUrl = info.tmdbUrl ?? info.imdbUrl;
     patch.mutate({
       eventId: current.id,
       payload: {
@@ -119,25 +148,12 @@ export default function WatchlogPage() {
     <div className="card">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-semibold">Zuletzt geschaut</h1>
-        <div className="flex gap-2">
-          <select className="input max-w-32" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-            <option value={10}>Letzte 10</option>
-            <option value={25}>Letzte 25</option>
-            <option value={50}>Letzte 50</option>
-            <option value={100}>Letzte 100</option>
-          </select>
-          <select className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="title">Titel</option>
-            <option value="actor">Schauspieler</option>
-          </select>
-          <input
-            className="input"
-            placeholder="Suche…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            disabled={!changeMovie}
-          />
-        </div>
+        <select className="input max-w-32" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          <option value={10}>Letzte 10</option>
+          <option value={25}>Letzte 25</option>
+          <option value={50}>Letzte 50</option>
+          <option value={100}>Letzte 100</option>
+        </select>
       </div>
       {isLoading && <div>Lade…</div>}
       <ul className="space-y-2">
@@ -164,7 +180,7 @@ export default function WatchlogPage() {
             </div>
             <div className="flex gap-2">
               <button className="btn" onClick={() => openEdit(w)}>
-                {w.is_placeholder ? "Film zuordnen" : "Bearbeiten"}
+                {w.is_placeholder ? "Titel zuordnen" : "Bearbeiten"}
               </button>
               <button
                 className="btn border-red-500 text-red-600"
@@ -218,18 +234,27 @@ export default function WatchlogPage() {
                 onChange={(e) => setChangeMovie(e.target.checked)}
               />
               <label htmlFor="change-movie" className="text-sm">
-                Neuen Film aus Suche übernehmen
+                Neuen Titel aus Suche übernehmen
               </label>
             </div>
             {changeMovie && (
               <div className="mt-3 space-y-2">
+                <div className="grid sm:grid-cols-3 gap-2">
+                  <select className="input" value={mode} onChange={(e) => setMode(e.target.value as SearchMode)}>
+                    <option value="title">Titel</option>
+                    <option value="actor">Schauspieler</option>
+                  </select>
+                  <input
+                    className="input sm:col-span-2"
+                    placeholder="Suchbegriff…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                </div>
                 {search.isFetching && <div className="card">Lade…</div>}
                 {search.data?.results?.map((m) => {
-                  const imdbSearch = `https://www.imdb.com/find/?q=${encodeURIComponent(m.title)}`;
-                  const tmdbLink = String(m.id).startsWith("tmdb:")
-                    ? `https://www.themoviedb.org/movie/${String(m.id).split(":")[1]}`
-                    : null;
-                  const link = tmdbLink || imdbSearch;
+                  const info = resolveTmdb(m);
+                  const link = info.tmdbUrl ?? info.imdbUrl;
                   return (
                     <button
                       key={m.id}
@@ -240,9 +265,12 @@ export default function WatchlogPage() {
                         <img src={m.poster} alt={m.title} className="w-12 h-16 object-cover rounded" />
                       )}
                       <div className="flex-1">
-                        <div className="font-medium flex items-center gap-2">
+                        <div className="font-medium flex items-center gap-2 flex-wrap">
                           <span>
                             {m.title} {m.year ? `(${m.year})` : ""}
+                          </span>
+                          <span className="text-xs rounded bg-slate-100 px-2 py-0.5 text-slate-700">
+                            {kindLabel(info.kind)}
                           </span>
                           <a className="text-xs underline" href={link} target="_blank" rel="noreferrer">
                             TMDb/IMDb
