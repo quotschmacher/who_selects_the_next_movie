@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { RotationNextResponse, UsersResponse, SearchResponse, SearchResult } from "@/lib/types";
@@ -12,24 +12,30 @@ type SelectMovieInput = {
 
 export default function SearchPage() {
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [mode, setMode] = useState("title");
   const qc = useQueryClient();
 
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(handle);
+  }, [q]);
+
   const users = useQuery<UsersResponse>({
     queryKey: ["users"],
-    queryFn: async () => api.get("/users") as Promise<UsersResponse>,
+    queryFn: () => api.get<UsersResponse>("/users"),
   });
 
   const nextTurn = useQuery<RotationNextResponse>({
     queryKey: ["next"],
-    queryFn: async () => api.get("/rotation/next") as Promise<RotationNextResponse>,
+    queryFn: () => api.get<RotationNextResponse>("/rotation/next"),
   });
 
   const search = useQuery<SearchResponse>({
-    queryKey: ["search", q, mode],
-    queryFn: async () =>
-      api.get(`/movies/search2?q=${encodeURIComponent(q)}&mode=${mode}`) as Promise<SearchResponse>,
-    enabled: q.length > 1,
+    queryKey: ["search", debouncedQ, mode],
+    queryFn: () =>
+      api.get<SearchResponse>(`/movies/search2?q=${encodeURIComponent(debouncedQ)}&mode=${mode}`),
+    enabled: debouncedQ.length > 1,
   });
 
   const [open, setOpen] = useState(false);
@@ -192,4 +198,3 @@ export default function SearchPage() {
     </div>
   );
 }
-

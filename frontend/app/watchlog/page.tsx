@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
@@ -21,16 +21,24 @@ type UpdateWatchEventPayload = {
 
 export default function WatchlogPage() {
   const [limit, setLimit] = useState(25);
+  const [mode, setMode] = useState("title");
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(handle);
+  }, [q]);
 
   const { data, isLoading } = useQuery<WatchlogResponse>({
     queryKey: ["watchlog", limit],
-    queryFn: async () => api.get(`/watchlog?limit=${limit}`) as Promise<WatchlogResponse>,
+    queryFn: () => api.get<WatchlogResponse>(`/watchlog?limit=${limit}`),
   });
 
   const users = useQuery<UsersResponse>({
     queryKey: ["users"],
-    queryFn: async () => api.get("/users") as Promise<UsersResponse>,
+    queryFn: () => api.get<UsersResponse>("/users"),
   });
 
   const [open, setOpen] = useState(false);
@@ -39,14 +47,12 @@ export default function WatchlogPage() {
   const [picker, setPicker] = useState<number | null>(null);
   const [titleVal, setTitleVal] = useState("");
   const [changeMovie, setChangeMovie] = useState(false);
-  const [mode, setMode] = useState("title");
-  const [q, setQ] = useState("");
 
   const search = useQuery<SearchResponse>({
-    queryKey: ["search-edit", q, mode],
-    queryFn: async () =>
-      api.get(`/movies/search2?q=${encodeURIComponent(q)}&mode=${mode}`) as Promise<SearchResponse>,
-    enabled: changeMovie && q.length > 1,
+    queryKey: ["search-edit", debouncedQ, mode],
+    queryFn: () =>
+      api.get<SearchResponse>(`/movies/search2?q=${encodeURIComponent(debouncedQ)}&mode=${mode}`),
+    enabled: changeMovie && debouncedQ.length > 1,
   });
 
   const patch = useMutation({
@@ -113,12 +119,25 @@ export default function WatchlogPage() {
     <div className="card">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-xl font-semibold">Zuletzt geschaut</h1>
-        <select className="input max-w-32" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-          <option value={10}>Letzte 10</option>
-          <option value={25}>Letzte 25</option>
-          <option value={50}>Letzte 50</option>
-          <option value={100}>Letzte 100</option>
-        </select>
+        <div className="flex gap-2">
+          <select className="input max-w-32" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            <option value={10}>Letzte 10</option>
+            <option value={25}>Letzte 25</option>
+            <option value={50}>Letzte 50</option>
+            <option value={100}>Letzte 100</option>
+          </select>
+          <select className="input" value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="title">Titel</option>
+            <option value="actor">Schauspieler</option>
+          </select>
+          <input
+            className="input"
+            placeholder="Suche…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            disabled={!changeMovie}
+          />
+        </div>
       </div>
       {isLoading && <div>Lade…</div>}
       <ul className="space-y-2">
@@ -161,7 +180,92 @@ export default function WatchlogPage() {
           </li>
         ))}
       </ul>
+
+      {open && current && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="card max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-3">Eintrag bearbeiten</h2>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span>Datum</span>
+                <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span>Nutzer ändern (optional)</span>
+                <select
+                  className="input"
+                  value={picker !== null ? String(picker) : ""}
+                  onChange={(e) => setPicker(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Keine Änderung</option>
+                  {users.data?.items?.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-sm mt-2">
+              <span>Titel</span>
+              <input className="input" value={titleVal} onChange={(e) => setTitleVal(e.target.value)} />
+            </label>
+            <div className="flex items-center gap-2 mt-3">
+              <input
+                id="change-movie"
+                type="checkbox"
+                checked={changeMovie}
+                onChange={(e) => setChangeMovie(e.target.checked)}
+              />
+              <label htmlFor="change-movie" className="text-sm">
+                Neuen Film aus Suche übernehmen
+              </label>
+            </div>
+            {changeMovie && (
+              <div className="mt-3 space-y-2">
+                {search.isFetching && <div className="card">Lade…</div>}
+                {search.data?.results?.map((m) => {
+                  const imdbSearch = `https://www.imdb.com/find/?q=${encodeURIComponent(m.title)}`;
+                  const tmdbLink = String(m.id).startsWith("tmdb:")
+                    ? `https://www.themoviedb.org/movie/${String(m.id).split(":")[1]}`
+                    : null;
+                  const link = tmdbLink || imdbSearch;
+                  return (
+                    <button
+                      key={m.id}
+                      className="card flex items-center gap-3 text-left"
+                      onClick={() => selectMovie(m)}
+                    >
+                      {m.poster && (
+                        <img src={m.poster} alt={m.title} className="w-12 h-16 object-cover rounded" />
+                      )}
+                      <div className="flex-1">
+                        <div className="font-medium flex items-center gap-2">
+                          <span>
+                            {m.title} {m.year ? `(${m.year})` : ""}
+                          </span>
+                          <a className="text-xs underline" href={link} target="_blank" rel="noreferrer">
+                            TMDb/IMDb
+                          </a>
+                        </div>
+                        <div className="text-xs text-gray-600 line-clamp-2">{m.overview}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn" onClick={() => setOpen(false)}>
+                Abbrechen
+              </button>
+              <button className="btn" onClick={saveMetaOnly} disabled={patch.isPending}>
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
