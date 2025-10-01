@@ -217,7 +217,7 @@ async def search_movies2(q: str, mode: str = "title"):
                     "title": m.get("title"),
                     "year": (m.get("release_date") or "")[:4],
                     "overview": m.get("overview"),
-                    "poster": f"https://image.tmdb.org/t/p/w185{m.get("poster_path")}" if m.get("poster_path") else ""
+                    "poster": f"https://image.tmdb.org/t/p/w185{m.get('poster_path')}" if m.get("poster_path") else ""
                 })
             return {"results": results}
     except httpx.HTTPError as e:
@@ -349,3 +349,4 @@ def delete_watchevent(event_id: int):
         s.delete(ev)
         s.commit()
         return {"ok": True}
+
