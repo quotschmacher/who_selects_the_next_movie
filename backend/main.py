@@ -229,7 +229,7 @@ async def search_movies2(q: str, mode: str = "title"):
                 tv_resp.raise_for_status()
                 tv_results = tv_resp.json().get("results", [])
             except httpx.HTTPError as tv_error:
-                print(f"[TMDb error] {tv_error!r} – tv search skipped")
+                print(f"[TMDb error] {tv_error!r} - tv search skipped")
 
             combined = []
             for m in movie_results:
@@ -265,7 +265,7 @@ async def search_movies2(q: str, mode: str = "title"):
             results = [item[1] for item in combined[:20]]
             return {"results": results}
     except httpx.HTTPError as e:
-        print(f"[TMDb error] {e!r} – fallback to mock")
+        print(f"[TMDb error] {e!r} - fallback to mock")
 
     return {"results": mock_results(q, mode)}
 
@@ -345,7 +345,7 @@ def rotation_confirm(payload: dict | None = None):
                 ts = datetime.fromisoformat(watched_at_raw)
         else:
             ts = datetime.utcnow()
-        title = payload.get("title") or "Platzhalter â€“ Auswahl folgt"
+        title = payload.get("title") or "Platzhalter -- Auswahl folgt"
         ev = WatchEvent(picker_user_id=picker_id, movie_id="placeholder", title=title, search_url=None, poster_url=None, watched_at=ts)
         s.add(ev)
         s.commit()
@@ -394,4 +394,5 @@ def delete_watchevent(event_id: int):
         s.delete(ev)
         s.commit()
         return {"ok": True}
+
 
