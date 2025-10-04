@@ -36,6 +36,11 @@ function kindLabel(kind: SearchKind): string {
   return kind === "tv" ? "Serie" : "Film";
 }
 
+function localDateString(date: Date = new Date()): string {
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 export default function SearchPage() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -66,7 +71,7 @@ export default function SearchPage() {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [picker, setPicker] = useState<number | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => localDateString());
 
   const selectMutation = useMutation({
     mutationFn: async ({ movie, pickerId, watchedDate }: SelectMovieInput) => {
@@ -77,7 +82,7 @@ export default function SearchPage() {
         movie_id: movie.id,
         title: movie.title,
         picker_user_id: pickerId,
-        watched_at: new Date(`${watchedDate}T00:00:00`).toISOString(),
+        watched_at: watchedDate,
         search_url: searchUrl,
         poster_url: movie.poster || null,
       });

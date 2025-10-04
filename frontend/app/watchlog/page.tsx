@@ -45,6 +45,11 @@ function kindLabel(kind: SearchKind): string {
   return kind === "tv" ? "Serie" : "Film";
 }
 
+function localDateString(date: Date = new Date()): string {
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 export default function WatchlogPage() {
   const [limit, setLimit] = useState(25);
   const [mode, setMode] = useState<SearchMode>("title");
@@ -106,7 +111,7 @@ export default function WatchlogPage() {
 
   function openEdit(item: WatchlogItem) {
     setCurrent(item);
-    setDate(item.watched_at?.slice(0, 10) || new Date().toISOString().slice(0, 10));
+    setDate(item.watched_at?.slice(0, 10) || localDateString());
     setPicker(null);
     setTitleVal(item.title || "");
     setChangeMovie(item.is_placeholder || false);
@@ -122,7 +127,7 @@ export default function WatchlogPage() {
     patch.mutate({
       eventId: current.id,
       payload: {
-        watched_at: new Date(`${date}T00:00:00`).toISOString(),
+        watched_at: date,
         ...(picker !== null ? { picker_user_id: picker } : {}),
         movie_id: movie.id,
         title: movie.title,
@@ -137,7 +142,7 @@ export default function WatchlogPage() {
     patch.mutate({
       eventId: current.id,
       payload: {
-        watched_at: new Date(`${date}T00:00:00`).toISOString(),
+        watched_at: date,
         ...(picker !== null ? { picker_user_id: picker } : {}),
         ...(titleVal ? { title: titleVal } : {}),
       },
