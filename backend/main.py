@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import os, uuid
 
@@ -64,9 +64,34 @@ def init_db():
             s.add(User(name="Kim", email="kim@local", position=2))
             s.commit()
 
+
+def fix_watched_at_offsets():
+    with Session(engine) as s:
+        events = s.exec(select(WatchEvent)).all()
+        updated = 0
+        for ev in events:
+            ts = ev.watched_at
+            if not isinstance(ts, datetime):
+                continue
+            cleaned = ts.replace(tzinfo=None) if getattr(ts, 'tzinfo', None) else ts
+            delta_hours = 0
+            if cleaned.minute == 0 and cleaned.second == 0 and cleaned.microsecond == 0 and cleaned.hour != 0:
+                delta_hours = (24 - cleaned.hour) % 24
+            if 0 < delta_hours <= 6:
+                corrected = (cleaned + timedelta(hours=delta_hours)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                corrected = cleaned
+            if corrected != ts:
+                ev.watched_at = corrected
+                updated += 1
+        if updated:
+            s.commit()
+            print(f"[startup] adjusted {updated} watch events with shifted timestamps")
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    fix_watched_at_offsets()
 
 def compute_next_user_id(session: Session) -> Optional[int]:
     users = session.exec(select(User).order_by(User.position.asc(), User.id.asc())).all()
